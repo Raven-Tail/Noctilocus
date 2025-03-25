@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/raven-tail/Noctilocus?style=flat)](https://github.com/raven-tail/Noctilocus/blob/main/LICENSE)
 [![.NET 8](https://img.shields.io/badge/.NET%208-%23512bd4?style=flat)](https://dotnet.microsoft.com/)
 [![.NET 9](https://img.shields.io/badge/.NET%209-%23512bd4?style=flat)](https://dotnet.microsoft.com/)
-[![Downloads](https://img.shields.io/nuget/dt/Noctilocus.contracts?style=flat)](https://www.nuget.org/packages/Noctilocus.Contracts/)
+[![Downloads](https://img.shields.io/nuget/dt/Noctilocus?style=flat)](https://www.nuget.org/packages/Noctilocus.Contracts/)
 
 A C# port of the [ngx-translate](https://github.com/ngx-translate/core). The port is not one to one and also aims to be more C# friendly where possible.
 
