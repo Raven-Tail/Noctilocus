@@ -1,0 +1,24 @@
+<Project>
+  <!---->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <!---->
+  <!-- Packagges -->
+  <ItemGroup>
+    <PackageVersion Include="R3" Version="1.3.0" />
+    <PackageVersion Include="SmartFormat" Version="3.6.0" />
+  </ItemGroup>
+  <!---->
+  <!-- Testing -->
+  <ItemGroup>
+    <PackageVersion Include="TUnit" Version="0.18.60" />
+  </ItemGroup>
+  <!---->
+  <!-- Versioning & SourceLink -->
+  <ItemGroup>
+    <GlobalPackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <GlobalPackageReference Include="GitVersion.MSBuild" Version="6.1.0" />
+  </ItemGroup>
+  <!---->
+</Project>
