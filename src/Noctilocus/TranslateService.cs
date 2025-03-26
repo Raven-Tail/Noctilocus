@@ -16,7 +16,7 @@ public sealed class TranslateService
     private readonly TranslateCompiler compiler;
     private readonly TranslateServiceOptions options;
 
-    private readonly ConcurrentDictionary<string, Observable<Translations>> translationsLoading = [];
+    private readonly ConcurrentDictionary<string, TranslationLoader> translationsLoading = [];
 
     /// <summary>
     /// The default language to fallback when translations are missing in the current language.
@@ -138,25 +138,7 @@ public sealed class TranslateService
     /// <returns>An observable sequence of translations for the specified language.</returns>
     public Observable<Translations> LoadTranslation(string lang, bool merge = false)
     {
-        Langs.Add(lang);
-
-        return translationsLoading
-            .GetOrAdd(lang, (key) => loader
-                .GetTranslation(lang)
-                .Do(translations =>
-                {
-                    translations = compiler.CompileTranslations(translations, lang);
-                    if (merge)
-                        store.Languages.Get(lang).Merge(translations);
-                    else
-                        store.Languages.Set(lang, translations);
-
-                    translationsLoading.TryRemove(lang, out _);
-                })
-                .Catch<Translations, Exception>(Observable.Throw<Translations>)
-                .Replay()
-                .Take(1)
-            );
+        return translationsLoading.GetOrAdd(lang, lang => new TranslationLoader(this, lang, merge)).Load;
     }
 
     /// <summary>
@@ -208,7 +190,6 @@ public sealed class TranslateService
     public Observable<Translations> ReloadLang(string lang, bool merge = false)
     {
         ResetLang(lang);
-        translationsLoading.TryRemove(lang, out _);
         return LoadTranslation(lang, merge);
     }
 
@@ -218,8 +199,10 @@ public sealed class TranslateService
     /// <param name="lang">The language key to reset.</param>
     public void ResetLang(string lang)
     {
-        // todo: this won't cancel the existing call.
-        translationsLoading.TryRemove(lang, out _);
+        if (translationsLoading.TryRemove(lang, out var loader))
+        {
+            loader.Cancel();
+        }
         store.Languages.Remove(lang);
     }
 
@@ -282,7 +265,7 @@ public sealed class TranslateService
     }
 
     // todo: Add the GetMany method.
-    // todo: Consider adding the Set and SetMany method.
+    // todo: Consider adding the Set and SetMany methods.
 
     /// <summary>
     /// Defines a bitwise OR operator for translating a string using a specified translation service.
@@ -293,5 +276,78 @@ public sealed class TranslateService
     public static TranslateString operator |(string key, TranslateService service)
     {
         return service.Instant(key, null);
+    }
+
+    /// <summary>
+    /// Represents a loader for translations with cancellation support.
+    /// </summary>
+    private readonly struct TranslationLoader
+    {
+        private readonly CancellationTokenSource cts = new();
+
+        /// <summary>
+        /// Gets an observable sequence of translations for the specified language.
+        /// </summary>
+        public Observable<Translations> Load { get; }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TranslationLoader"/> struct.
+        /// </summary>
+        /// <param name="service">The translation service that provides access to language resources and parsing functionality.</param>
+        /// <param name="lang">The language code for which to load translations.</param>
+        /// <param name="merge">A value indicating whether to merge the new translations with existing ones or replace them.</param>
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TranslationLoader"/> struct.
+        /// </summary>
+        /// <param name="lang">The language code for which to load translations.</param>
+        public TranslationLoader(TranslateService service, string lang, bool merge)
+        {
+            Load = CreateDefer((service, lang), static state => state.service.loader.GetTranslation(state.lang))
+                .Do((service, lang, merge), static (translations, state) =>
+                {
+                    var (service, lang, merge) = state;
+                    service.Langs.Add(lang);
+                    translations = service.compiler.CompileTranslations(translations, lang);
+                    if (merge)
+                        service.store.Languages.Get(lang).Merge(translations);
+                    else
+                        service.store.Languages.Set(lang, translations);
+                })
+                .Replay()
+                .RefCount()
+                .TakeUntil(cts.Token);
+        }
+
+        /// <summary>
+        /// Cancels the loading of translations.
+        /// </summary>
+        public readonly void Cancel()
+        {
+            cts.Cancel();
+        }
+    }
+
+    internal static Defer<T, TState> CreateDefer<T, TState>(TState state, Func<TState, Observable<T>> observableFactory, bool rawObserver = false)
+    {
+        return new Defer<T, TState>(state, observableFactory, rawObserver);
+    }
+
+    internal sealed class Defer<T, TState>(TState state, Func<TState, Observable<T>> observableFactory, bool rawObserver) : Observable<T>
+    {
+        protected override IDisposable SubscribeCore(Observer<T> observer)
+        {
+            var observable = default(Observable<T>);
+            try
+            {
+                observable = observableFactory(state);
+            }
+            catch (Exception ex)
+            {
+                observer.OnCompleted(ex); // when failed, return Completed(Error)
+                return Disposable.Empty;
+            }
+
+            return observable.Subscribe(rawObserver ? observer : observer.Wrap());
+        }
     }
 }
